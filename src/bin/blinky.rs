@@ -154,14 +154,17 @@ impl <RST, WS, D, SPI, E> St7585<RST, WS, D, SPI>
         let _ = self.cmd(0x30, true);
         let _ = self.cmd(0x20, true);
         let _ = self.cmd(0x0c, true);
-        
-        //clear screen
-        let _ = self.cmd(0x40, true);
-        let _ = self.cmd(0x80, true);
+
+        let _ = self.clear_screen();
+
+        Ok(())
+    }
+
+    pub fn clear_screen(&mut self) -> Result<(), E> {
+        let _ = self.set_xy(0, 0);
         for _ in 0..960 {
             let _ = self.cmd(0x00, false);
         }
-
         let _ = self.set_xy(95, 8);
         let _ = self.cmd(0xff, false);
         let _ = self.set_xy(94, 8);
@@ -196,6 +199,8 @@ where
     WS: OutputPin,
 {
     fn write_str(&mut self, s: &str) -> fmt::Result {
+        self.x = 0;
+        self.y = 7;
         for c in s.chars() {
             self.write_char(c)?;
         }
@@ -318,7 +323,6 @@ async fn main(spawner: Spawner) {
     let _ = st7585.init();
     writeln!(st7585, "Hello St7585, Nice to meet you").unwrap();
     // reset usr_wifi232_t
-    Timer::after_millis(200).await;
     rst.set_low();
     Timer::after_millis(300).await;
     rst.set_high();
@@ -331,7 +335,7 @@ async fn main(spawner: Spawner) {
     unwrap!(usr_tx.write_all("a".as_bytes()).await);
     unwrap!(usr_rx.read(&mut s).await);
     // waiting finish
-    Timer::after_millis(200).await;
+    Timer::after_millis(500).await;
     usr_cmd(&mut usr_rx, &mut usr_tx, "at+wmode=sta\r", &mut s).await;
     usr_cmd(&mut usr_rx, &mut usr_tx, "at+wmode=sta\r", &mut s).await;
     usr_cmd(&mut usr_rx, &mut usr_tx, "at+wsssid\r", &mut s).await;
@@ -347,6 +351,8 @@ async fn main(spawner: Spawner) {
         let tcplk = core::str::from_utf8(&s).unwrap();
         usr_cmd(&mut usr_rx, &mut usr_tx, "at+ping=www.baidu.com\r", &mut ss).await;
         let ping = core::str::from_utf8(&ss).unwrap();
+        let _ = st7585.clear_screen();
+        writeln!(st7585, "{ping}").unwrap();
         if ping.contains("Success") && tcplk.contains("on") {
             info!("network stable!");
             usr_cmd(&mut usr_rx, &mut usr_tx, "at+entm\r", &mut s).await;
