@@ -6,12 +6,109 @@ use embassy_executor::Spawner;
 use embassy_stm32::usart::{Config, BufferedUart, BufferedUartRx, BufferedUartTx};
 use embassy_stm32::{bind_interrupts, peripherals, usart};
 use embassy_stm32::gpio::{Level, Output, Speed, Pin, AnyPin};
-use embassy_time::Timer;
+use embassy_time::{Timer, Delay};
 use embassy_stm32::time::Hertz;
 use embedded_io_async::BufRead;
 use embedded_io_async::{Read, Write};
 use static_cell::StaticCell;
 use {defmt_rtt as _, panic_probe as _};
+
+use embedded_hal::digital::v2::OutputPin;
+use embedded_hal::blocking::spi::{Write as SpiWrite};
+use embedded_hal::blocking::delay::DelayMs;
+use embassy_stm32::spi::{Config as SpiConfig, Spi};
+use core::fmt;
+use core::fmt::Write as FmtWrite;
+pub struct St7585<RST, WS, D, SPI> {
+    spi: SPI,
+    rst: RST,
+    ws: WS,
+    delay: D,
+    x: u16,
+    y: u16,
+}
+
+impl <RST, WS, D, SPI, E> St7585<RST, WS, D, SPI>
+    where
+        RST: OutputPin,
+        WS: OutputPin,
+        D: DelayMs<u8>,
+        SPI: SpiWrite<u8, Error = E>,
+{
+    pub fn new(
+        rst: RST,
+        ws: WS,
+        delay: D,
+        spi: SPI) -> Self {
+        Self {spi, rst, ws, delay, x: 0, y: 7}
+    }
+
+    pub fn init(&mut self) -> Result<(), E> {
+        let _ = self.rst.set_low();
+        let _ = self.delay.delay_ms(100);
+        let _ = self.rst.set_high();
+        let _ = self.delay.delay_ms(100);
+        
+        let _ = self.cmd(0x21, true);
+        let _ = self.cmd(0x9c, true);
+        let _ = self.cmd(0x30, true);
+        let _ = self.cmd(0x20, true);
+        let _ = self.cmd(0x0c, true);
+        
+        //clear screen
+        let _ = self.cmd(0x40, true);
+        let _ = self.cmd(0x80, true);
+        for _ in 0..960 {
+            let _ = self.cmd(0x00, false);
+        }
+
+        Ok(())
+    }
+
+    fn cmd(&mut self, command: u8, dc: bool) -> Result<(), E> {
+        if dc {
+            let _ = self.ws.set_low();
+        } else {
+            let _ = self.ws.set_high();
+        }
+
+        self.spi.write(&[command])
+    }
+}
+
+impl<RST, WS, D, SPI, E> fmt::Write for St7585<RST, WS, D, SPI>
+where
+    SPI: SpiWrite<u8, Error = E>,
+    D: DelayMs<u8>,
+    WS: OutputPin,
+{
+    fn write_str(&mut self, s: &str) -> fmt::Result {
+        for c in s.chars() {
+            self.write_char(c)?;
+        }
+        self.delay.delay_ms(1);
+        Ok(())
+    }
+
+    fn write_char(&mut self, c: char) -> fmt::Result {
+        let mut command = [0x40, 0, 0, 0];
+        c.encode_utf8(&mut command[1..]);
+        self.x = self.x + 6 as u16;
+        if self.x >= 96 as u16 {
+            self.x = 0 as u16;
+            self.y = self.y - 1 as u16;
+            if self.y == 0 as u16 {
+                self.y = 7 as u16;
+            }
+        }
+        let _ = self.ws.set_low();
+        let _ = self.spi.write(&[0x40 as u8 | self.y as u8]);
+        let _ = self.spi.write(&[0x80 as u8 | self.x as u8]);
+        let _ = self.ws.set_high();
+        let _ = self.spi.write(&command[..2]);
+        Ok(())
+    }
+}
 
 bind_interrupts!(struct Irqs {
     USART2 => usart::BufferedInterruptHandler<peripherals::USART2>;
@@ -92,6 +189,16 @@ async fn main(spawner: Spawner) {
     let (mut usr_tx, mut usr_rx) = usart.split();
     let mut rst = Output::new(p.PA0, Level::High, Speed::Low);
 
+    let st7585_rst = Output::new(p.PA1, Level::High, Speed::Low);
+    let st7585_ws = Output::new(p.PA8, Level::High, Speed::Low);
+    let _st7585_cs = Output::new(p.PA4, Level::Low, Speed::Low);
+    let mut spi_config = SpiConfig::default();
+    spi_config.frequency = Hertz(20_000_000);
+    let st7585_spi = Spi::new_blocking(p.SPI1, p.PA5, p.PA7, p.PA6, spi_config);
+
+    let mut st7585 = St7585::new(st7585_rst, st7585_ws, Delay, st7585_spi);
+    let _ = st7585.init();
+    writeln!(st7585, "Hello St7585").unwrap();
     // reset usr_wifi232_t
     Timer::after_millis(200).await;
     rst.set_low();
@@ -120,7 +227,7 @@ async fn main(spawner: Spawner) {
         usr_cmd(&mut usr_rx, &mut usr_tx, "at+netp\r", &mut s).await;
         usr_cmd(&mut usr_rx, &mut usr_tx, "at+tcplk\r", &mut s).await;
         let tcplk = core::str::from_utf8(&s).unwrap();
-        usr_cmd(&mut usr_rx, &mut usr_tx, "at+ping=192.168.1.1\r", &mut ss).await;
+        usr_cmd(&mut usr_rx, &mut usr_tx, "at+ping=www.baidu.com\r", &mut ss).await;
         let ping = core::str::from_utf8(&ss).unwrap();
         if ping.contains("Success") && tcplk.contains("on") {
             info!("network stable!");
