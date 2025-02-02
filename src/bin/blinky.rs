@@ -62,7 +62,20 @@ impl <RST, WS, D, SPI, E> St7585<RST, WS, D, SPI>
             let _ = self.cmd(0x00, false);
         }
 
+        let _ = self.set_xy(95, 8);
+        let _ = self.cmd(0xff, false);
+        let _ = self.set_xy(94, 8);
+        let _ = self.cmd(0xff, false);
+        let _ = self.set_xy(93, 8);
+        let _ = self.cmd(0xff, false);
+        let _ = self.set_xy(80, 8);
+        let _ = self.cmd(0xff, false);
         Ok(())
+    }
+
+    fn set_xy(&mut self, x: u8, y: u8) -> Result<(), E> {
+        let _ = self.cmd(0x40 | y, true);
+        self.cmd(0x80 | x, true)
     }
 
     fn cmd(&mut self, command: u8, dc: bool) -> Result<(), E> {
