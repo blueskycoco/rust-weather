@@ -271,8 +271,10 @@ async fn usr_cmd(rx: &mut BufferedUartRx<'_>,
         if s.get(cnt - 4) == Some(&b'\r') && s.get(cnt - 3) == Some(&b'\n') &&
            s.get(cnt - 2) == Some(&b'\r') && s.get(cnt - 1) == Some(&b'\n') {
             let str_resp = core::str::from_utf8(s).unwrap();
-            info!("{}", str_resp);
-            break;
+            if str_resp.contains("ok") || str_resp.contains("ERR") {
+                info!("{}", str_resp);
+                break;
+            }
         }
     }
 }
@@ -326,14 +328,20 @@ async fn main(spawner: Spawner) {
     rst.set_low();
     Timer::after_millis(300).await;
     rst.set_high();
-    Timer::after_millis(2000).await;
-
+    Timer::after_millis(3000).await;
+    info!("111");
     // enter at command mode
     let mut s = [0u8; 128];
-    unwrap!(usr_tx.write_all("+++".as_bytes()).await);
+    unwrap!(usr_tx.write_all("+".as_bytes()).await);
+    Timer::after_millis(100).await;
+    unwrap!(usr_tx.write_all("+".as_bytes()).await);
+    Timer::after_millis(100).await;
+    unwrap!(usr_tx.write_all("+".as_bytes()).await);
+    Timer::after_millis(100).await;
     unwrap!(usr_rx.read(&mut s).await);
     unwrap!(usr_tx.write_all("a".as_bytes()).await);
     unwrap!(usr_rx.read(&mut s).await);
+    info!("222");
     // waiting finish
     Timer::after_millis(1000).await;
     usr_cmd(&mut usr_rx, &mut usr_tx, "at+wmode=sta\r", &mut s).await;
