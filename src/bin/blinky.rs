@@ -335,21 +335,27 @@ async fn main(spawner: Spawner) {
     unwrap!(usr_tx.write_all("a".as_bytes()).await);
     unwrap!(usr_rx.read(&mut s).await);
     // waiting finish
-    Timer::after_millis(500).await;
+    Timer::after_millis(1000).await;
     usr_cmd(&mut usr_rx, &mut usr_tx, "at+wmode=sta\r", &mut s).await;
     usr_cmd(&mut usr_rx, &mut usr_tx, "at+wmode=sta\r", &mut s).await;
     usr_cmd(&mut usr_rx, &mut usr_tx, "at+wsssid\r", &mut s).await;
     usr_cmd(&mut usr_rx, &mut usr_tx, "at+wskey\r", &mut s).await;
     usr_cmd(&mut usr_rx, &mut usr_tx, "at+netp=TCP,Server,1234,192.168.1.10\r", &mut s).await;
     usr_cmd(&mut usr_rx, &mut usr_tx, "at+tcpdis=on\r", &mut s).await;
+    usr_cmd(&mut usr_rx, &mut usr_tx, "at+httptp=get\r", &mut s).await;
+    usr_cmd(&mut usr_rx, &mut usr_tx, "at+httpurl=123.56.216.251,443\r", &mut s).await;
+    //usr_cmd(&mut usr_rx, &mut usr_tx, "at+httpurl=https://devapi.qweather.com,443\r", &mut s).await;
+    //usr_cmd(&mut usr_rx, &mut usr_tx, "at+httpurl=https://devapi.qweather.com/v7/minutely/5m?location=39.95,116.46\r", &mut s).await;
+    usr_cmd(&mut usr_rx, &mut usr_tx, "at+httpph=/v7/minutely/5m?location=39.95,116.46&key=c8cd8ac05fcb4808baf95c58c94c2fe8\r", &mut s).await;
+    //usr_cmd(&mut usr_rx, &mut usr_tx, "at+httpph=X-QW-Api-Key: c8cd8ac05fcb4808baf95c58c94c2fe8\r", &mut s).await;
 
     loop {
-        let mut ss = [0u8; 128];
+        let mut ss = [0u8; 512];
         usr_cmd(&mut usr_rx, &mut usr_tx, "at+wann\r", &mut s).await;
         usr_cmd(&mut usr_rx, &mut usr_tx, "at+netp\r", &mut s).await;
         usr_cmd(&mut usr_rx, &mut usr_tx, "at+tcplk\r", &mut s).await;
         let tcplk = core::str::from_utf8(&s).unwrap();
-        usr_cmd(&mut usr_rx, &mut usr_tx, "at+ping=www.baidu.com\r", &mut ss).await;
+        usr_cmd(&mut usr_rx, &mut usr_tx, "at+httpdt\r", &mut ss).await;
         let ping = core::str::from_utf8(&ss).unwrap();
         let _ = st7585.clear_screen();
         writeln!(st7585, "{ping}").unwrap();
