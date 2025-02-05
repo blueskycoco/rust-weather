@@ -302,9 +302,10 @@ async fn main(spawner: Spawner) {
     let p = embassy_stm32::init(config);
     //let p = embassy_stm32::init(Default::default());
 
-    spawner.spawn(blinky(p.PB14.degrade())).unwrap();
+    //spawner.spawn(blinky(p.PB14.degrade())).unwrap();
+    spawner.spawn(blinky(p.PB0.degrade())).unwrap();
     let mut config = Config::default();
-    config.baudrate = 115200;
+    config.baudrate = 460800;
     static TX_BUF: StaticCell<[u8; 128]> = StaticCell::new();
     let tx_buf = &mut TX_BUF.init([0; 128])[..];
     static RX_BUF: StaticCell<[u8; 128]> = StaticCell::new();
